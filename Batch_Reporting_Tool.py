@@ -47,7 +47,7 @@ except Exception:
     print("KU")
 conn = pyodbc.connect(
     'DRIVER={SQL Server};'
-    'SERVER=GLENMARK\SQLEXPRESS;'
+    'SERVER=\SQLEXPRESS;'
     'DATABASE=GT;'
     'Trusted_Connection=yes;'
 ) 
