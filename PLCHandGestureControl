@@ -1,0 +1,126 @@
+from ast import And
+from cvzone.PoseModule import PoseDetector
+import cv2
+from cvzone.HandTrackingModule import HandDetector
+import opcua
+from tkinter.messagebox import showerror
+from opcua import  ua
+from cvzone.FaceMeshModule import FaceMeshDetector
+import numpy as np
+try:
+    client = opcua.Client("opc.tcp://192.168.1.191:4840")
+    client.connect()
+
+except Exception:
+    showerror ("Connection Error", "OPC is not Connected")
+
+cap = cv2.VideoCapture(0)
+#detector = PoseDetector()
+detector = HandDetector(detectionCon=0.75,maxHands=2)
+detector2 = FaceMeshDetector()
+global Motor1 
+global Motor2
+Motor1 = False
+Motor2 = False
+face_detected = False
+try :
+    while True:
+        success, img = cap.read()
+        hands, img = detector.findHands(img)
+        img,face = detector2.findFaceMesh(img)
+        #img = detector1.findHands(img)
+        #lmlist, bboxinfo = detector.findPosition(img, bboxWithHands=False)
+        if len(face) > 0:
+            face_detected = True
+            loginface = client.get_node("ns=2;i=997379157")
+            loginface.set_attribute(ua.AttributeIds.Value, ua.DataValue(True))
+        else:
+            face_detected = False
+            loginface = client.get_node("ns=2;i=997379157")
+            loginface.set_attribute(ua.AttributeIds.Value, ua.DataValue(False))
+        if hands:
+            hand1 = hands[0]
+            lmlist = hand1["lmList"]
+            bbox1 = hand1["bbox"]
+            centerPoint1 = hand1
+            handtype1 = hand1["type"]
+            if face_detected == True:
+                if lmlist:
+                    fingerscount = detector.fingersUp(hand1)
+                if (fingerscount[0] == 0 and fingerscount[1]  == 1 and fingerscount[2] == 0 and fingerscount[3] == 0 and fingerscount[4] == 0):
+                    m1selec = client.get_node("ns=2;i=2417974557")
+                    m1selec.set_attribute(ua.AttributeIds.Value, ua.DataValue(True))
+                    Motor1 = True
+                    Motor2 = False
+                    #m1connected()
+                elif (fingerscount[0] == 0 and fingerscount[1]  == 1 and fingerscount[2] == 1 and fingerscount[3] == 0 and fingerscount[4] == 0) :
+                    m2selec =  client.get_node("ns=2;i=2066277918")
+                    m2selec.set_attribute(ua.AttributeIds.Value, ua.DataValue(True))
+                    Motor1 = False
+                    Motor2 = True
+                    #m2connected()
+
+                if Motor1 == True:
+                    lengthdirectionm1, infodirectionm1 = detector.findDistance(lmlist[4],lmlist[8])
+                    Directionm1 = infodirectionm1[0]
+                    print(Directionm1)
+                    if ((Directionm1 > 200) and (fingerscount[1] == 0)):
+                        M1FWD =  client.get_node("ns=2;i=1244141512")
+                        M1FWD.set_attribute(ua.AttributeIds.Value, ua.DataValue(True))
+                    if ((Directionm1 < 200) and (fingerscount[1] == 0)):
+                        M1REV =  client.get_node("ns=2;i=2374486119")
+                        M1REV.set_attribute(ua.AttributeIds.Value, ua.DataValue(True))
+                    if (fingerscount[0] == 1 and fingerscount[1] == 1 and fingerscount[2] == 1 and fingerscount[3] == 1 and fingerscount[4] == 1):
+                        M1Stop =  client.get_node("ns=2;i=167518093")
+                        M1Stop.set_attribute(ua.AttributeIds.Value, ua.DataValue(True))
+                    if (fingerscount[0] == 1 and fingerscount[1] == 1 and fingerscount[2] == 0 and fingerscount[3] == 0 and fingerscount[4] == 0):
+                        length, info, img = detector.findDistance(lmlist[4],lmlist[8],img)
+                        length = int(length)
+                        rpm1 = np.interp(length,[50,300],[0,100])
+                        rpm1 = int(rpm1)
+                        M1RPM = client.get_node("ns=2;i=2136800330")
+                        rpm1m1 = ua.DataValue(ua.Variant(rpm1, ua.VariantType.Int16))
+                        M1RPM.set_value(rpm1m1)
+
+                if Motor2 == True:
+                    lengthdirectionm2, infodirectionm2 = detector.findDistance(lmlist[4],lmlist[8])
+                    Directionm2 = infodirectionm2[0]
+                    print(Directionm2)
+                    if ((Directionm2 > 200) and (fingerscount[1] == 0)):
+                        M2FWD =  client.get_node("ns=2;i=3299282987")
+                        M2FWD.set_attribute(ua.AttributeIds.Value, ua.DataValue(True))
+                    if ((Directionm2 < 200) and (fingerscount[1] == 0)):
+                        M2REV =  client.get_node("ns=2;i=50909060")
+                        M2REV.set_attribute(ua.AttributeIds.Value, ua.DataValue(True))
+                    if (fingerscount[0] == 1 and fingerscount[1] == 1 and fingerscount[2] == 1 and fingerscount[3] == 1 and fingerscount[4] == 1):
+                        M2Stop =  client.get_node("ns=2;i=1314678109")
+                        M2Stop.set_attribute(ua.AttributeIds.Value, ua.DataValue(True))
+                    if (fingerscount[0] == 1 and fingerscount[1] == 1 and fingerscount[2] == 0 and fingerscount[3] == 0 and fingerscount[4] == 0):
+                        length, info, img = detector.findDistance(lmlist[4],lmlist[8],img)
+                        length = int(length)
+                        rpm2 = np.interp(length,[50,300],[0,100])
+                        rpm2 = int(rpm2)
+                        M2RPM = client.get_node("ns=2;i=956073626")
+                        rpm2m2 = ua.DataValue(ua.Variant(rpm2, ua.VariantType.Int16))
+                        M2RPM.set_value(rpm2m2)
+        cv2.imshow("Image", img)
+        cv2.waitKey(1)
+
+except Exception:
+    opcua.Client.disconnect(client)
+
+        # def m1connected():
+        #     m1selec = client.get_node("ns=2;i=53352594")
+        #     m1selec.set_attribute(ua.AttributeIds.Value, ua.DataValue(True))
+        #     print("M1")
+
+        # def m2connected():
+        #     m2selec =  client.get_node("ns=2;i=3893994385")
+        #     m2selec.set_attribute(ua.AttributeIds.Value, ua.DataValue(True))
+        #     print("M2")
+        
+
+
+
+
+
